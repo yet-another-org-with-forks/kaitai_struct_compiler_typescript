@@ -24,6 +24,7 @@ object LanguageCompilerStatic {
     "python" -> PythonCompiler,
     "ruby" -> RubyCompiler,
     "rust" -> RustCompiler,
+    "typescript" -> TypeScriptCompiler,
     "zig" -> ZigCompiler
   )
 
