@@ -1126,7 +1126,7 @@ object TypeScriptCompiler extends LanguageCompilerStatic
           case _ => false
         }
       if (isUpcast) {
-        // return expr
+        return expr
       }
       s"(($expr) as ${tsType(targetType, isNullable = false, config)})"
     } else {
