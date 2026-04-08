@@ -20,10 +20,11 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     with EveryReadIsExpression
     with FetchInstances
     with EveryWriteIsExpression
+    with GenericChecks
     with SwitchIfOps {
   import TypeScriptCompiler._
 
-  override val translator: TypeScriptTranslator = new TypeScriptTranslator(typeProvider, importList)
+  override val translator: TypeScriptTranslator = new TypeScriptTranslator(typeProvider, importList, config)
 
   override def universalFooter: Unit = {
     out.dec
@@ -77,7 +78,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       out.puts(renderMemberDeclaration("#_is_le", "boolean", isNullable = true))
 
     if (config.readStoresPos)
-      out.puts(renderMemberDeclaration("_debug", s"$kstructName.Debug"))
+      out.puts(renderMemberDeclaration("_debug", s"Record<string, $kstructName.Debug>", isNullable = false, "{}"))
 
     out.puts
   }
@@ -99,11 +100,11 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       s"_parent?: ${tsType(parentClassName)}",
       s"_root?: ${tsType(CalcUserType(rootClassName, None))}",
       if (isHybrid) s"_is_le?: boolean" else ""
-    );
+    )
     val additionalParamsList = params.map((p) => s"${paramName(p.id)}: ${tsType(p.dataType)}");
     val constructorArgs = (mainParamsList ++ additionalParamsList).filter(_.nonEmpty).mkString(", ")
 
-    out.puts(s"constructor(${constructorArgs}) {")
+    out.puts(s"constructor($constructorArgs) {")
     out.inc
     out.puts("super(_io);")
     out.puts("this.#_parent = _parent;")
@@ -118,12 +119,6 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       out.puts("this.#_is_le = _is_le;")
 
     params.foreach((p) => handleAssignmentSimple(p.id, paramName(p.id)))
-
-    if (config.readStoresPos)
-      out.puts("this._debug = {};")
-
-    if (config.readWrite)
-      out.puts("this._setDirty(false);")
 
     out.puts
   }
@@ -192,10 +187,11 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     out.inc
   }
 
-  override def fetchInstancesFooter(): Unit = universalFooter
+  override def fetchInstancesFooter(): Unit =
+    universalFooter
 
   override def attrInvokeFetchInstances(baseExpr: Ast.expr, exprType: DataType, dataType: DataType): Unit = {
-    out.puts(s"${expression(baseExpr)}?._fetchInstances();")
+    out.puts(s"${expression(baseExpr)}!._fetchInstances();")
   }
 
   override def attrInvokeInstance(instName: InstanceIdentifier): Unit = {
@@ -869,7 +865,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     out.puts(s"$io.writeBytesLimit(${expression(expr)}, $size, $term, $padRight);")
 
   override def attrUserTypeInstreamWrite(io: String, valueExpr: Ast.expr, dataType: DataType, exprType: DataType): Unit =
-    out.puts(s"${expression(valueExpr)}?._write_Seq($io);")
+    out.puts(s"${expression(valueExpr)}!._write_Seq($io);")
 
   override def exprStreamToByteArray(io: String): String =
     s"$io.toByteArray()"
@@ -935,6 +931,9 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   private def tsType(attrType: DataType, isNullable: Boolean = false): String =
     TypeScriptCompiler.tsType(attrType, isNullable, config)
+
+  override def castIfNeeded(expr: String, exprType: DataType, targetType: DataType): String =
+    TypeScriptCompiler.castIfNeeded(expr, exprType, targetType, config)
 
   override def idToStr(id: Identifier): String =
     TypeScriptCompiler.idToStr(id)
@@ -1086,7 +1085,7 @@ object TypeScriptCompiler extends LanguageCompilerStatic
   def importClass(importList: ImportList, name: List[String]): Unit = {
     val procClass = type2class(name.last)
     val nameInit = name.init
-    val pkgName = if (nameInit.isEmpty) "" else nameInit.map(type2class).mkString(".") + "."
+    val pkgName = if (nameInit.isEmpty) "" else nameInit.map(type2class).mkString(".")
     if (pkgName.isEmpty) {
       importList.add(s"""import { $procClass } from "./$procClass.js";""")
     } else {
@@ -1094,7 +1093,7 @@ object TypeScriptCompiler extends LanguageCompilerStatic
     }
   }
 
-  private def tsType(attrType: DataType, isNullable: Boolean = false, config: RuntimeConfig): String = {
+  def tsType(attrType: DataType, isNullable: Boolean = false, config: RuntimeConfig): String = {
     val baseType = attrType match {
       case CalcIntType => "number"
       case CalcFloatType => "number"
@@ -1111,6 +1110,28 @@ object TypeScriptCompiler extends LanguageCompilerStatic
       case st: SwitchType => tsType(st.combinedType, isNullable = false, config)
     }
     if (isNullable) s"$baseType | undefined" else baseType
+  }
+
+  def castIfNeeded(expr: String, exprType: DataType, targetType: DataType, config: RuntimeConfig): String = {
+    val targetTypeComb = targetType.asCombined
+    if (targetTypeComb != exprType) {
+      // In TypeScript, upcasting can be performed implicitly, without the need for explicit conversion.
+      //
+      // It's not that important whether we detect *all* upcasting scenarios here. If we do not
+      // detect one, it only means that an unnecessary (but harmless) type cast will be generated.
+      val isUpcast =
+        (exprType, targetTypeComb) match {
+          case (_, AnyType) => true
+          case (_: UserType, KaitaiStructType | CalcKaitaiStructType(_)) => true
+          case _ => false
+        }
+      if (isUpcast) {
+        // return expr
+      }
+      s"(($expr) as ${tsType(targetType, isNullable = false, config)})"
+    } else {
+      expr
+    }
   }
 
   private def tsUserTypeName(t: UserType): String = {

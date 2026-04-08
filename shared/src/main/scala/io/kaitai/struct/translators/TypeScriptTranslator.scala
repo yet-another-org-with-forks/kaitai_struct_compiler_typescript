@@ -1,22 +1,23 @@
 package io.kaitai.struct.translators
 
-import io.kaitai.struct.{ImportList, Utils}
+import io.kaitai.struct.datatype.DataType
+import io.kaitai.struct.{ImportList, RuntimeConfig, Utils}
 import io.kaitai.struct.datatype.DataType._
 import io.kaitai.struct.exprlang.Ast
 import io.kaitai.struct.exprlang.Ast.expr
 import io.kaitai.struct.format.{EnumSpec, Identifier}
 import io.kaitai.struct.languages.TypeScriptCompiler
 
-class TypeScriptTranslator(provider: TypeProvider, importList: ImportList) extends BaseTranslator(provider) {
+class TypeScriptTranslator(provider: TypeProvider, importList: ImportList, config: RuntimeConfig) extends BaseTranslator(provider) {
   override def doByteArrayLiteral(arr: Seq[Byte]): String =
     s"new Uint8Array([${arr.map(_ & 0xff).mkString(", ")}])"
   override def doByteArrayNonLiteral(elts: Seq[Ast.expr]): String =
     s"new Uint8Array([${elts.map(translate).mkString(", ")}])"
 
   /**
-    * JavaScript rendition of common control character that would use hex form,
+    * TypeScript rendition of a common control character that would use a hex form,
     * not octal. "Octal" control character string literals might be accepted
-    * in non-strict JS mode, but in strict mode only hex or unicode are ok.
+    * in non-strict JS mode, but in strict mode only hex or Unicode are ok.
     * Here we'll use hex, as they are shorter.
     *
     * @see https://github.com/kaitai-io/kaitai_struct/issues/279
@@ -40,7 +41,7 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList) exten
   }
 
   override def anyField(value: Ast.expr, attrName: String): String =
-    s"${translate(value, METHOD_PRECEDENCE)}?.${doName(attrName)}"
+    s"${translate(value, METHOD_PRECEDENCE)}!.${doName(attrName)}"
 
   override def doLocalName(s: String): String = {
     s match {
@@ -80,6 +81,8 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList) exten
     s"${translate(container)}[${translate(idx)}]"
   override def doIfExp(condition: expr, ifTrue: expr, ifFalse: expr): String =
     s"(${translate(condition)} ? ${translate(ifTrue)} : ${translate(ifFalse)})"
+  override def doCast(value: Ast.expr, typeName: DataType): String =
+    TypeScriptCompiler.castIfNeeded(translate(value), AnyType, typeName, config)
 
   // Predefined methods of various types
   override def strToInt(s: expr, base: expr): String =
@@ -122,7 +125,7 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList) exten
     s"""${TypeScriptCompiler.kstreamName}.bytesToStr($bytesExpr, ${doStringLiteral(encoding)})"""
 
   override def strLength(s: expr): String =
-    s"${translate(s, METHOD_PRECEDENCE)}.length"
+    s"${translate(s, METHOD_PRECEDENCE)}!.length"
 
   // https://stackoverflow.com/a/36525647/2055163
   override def strReverse(s: expr): String =
@@ -144,7 +147,7 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList) exten
     s"$v[$v.length - 1]"
   }
   override def arraySize(a: expr): String =
-    s"${translate(a, METHOD_PRECEDENCE)}.length"
+    s"${translate(a, METHOD_PRECEDENCE)}!.length"
   override def arrayMin(a: expr): String =
     s"${TypeScriptCompiler.kstreamName}.arrayMin(${translate(a)})"
   override def arrayMax(a: expr): String =
