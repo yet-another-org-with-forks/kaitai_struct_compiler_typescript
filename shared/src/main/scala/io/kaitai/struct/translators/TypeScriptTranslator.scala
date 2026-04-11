@@ -6,9 +6,11 @@ import io.kaitai.struct.datatype.DataType._
 import io.kaitai.struct.exprlang.Ast
 import io.kaitai.struct.exprlang.Ast.expr
 import io.kaitai.struct.format.{EnumSpec, Identifier}
-import io.kaitai.struct.languages.TypeScriptCompiler
+import io.kaitai.struct.languages.{TypeScriptCompiler, TypeScriptCompilerStatic}
 
 class TypeScriptTranslator(provider: TypeProvider, importList: ImportList, config: RuntimeConfig) extends BaseTranslator(provider) {
+  protected def compilerStatic: TypeScriptCompilerStatic = TypeScriptCompiler
+
   override def doByteArrayLiteral(arr: Seq[Byte]): String =
     s"new Uint8Array([${arr.map(_ & 0xff).mkString(", ")}])"
   override def doByteArrayNonLiteral(elts: Seq[Ast.expr]): String =
@@ -32,7 +34,7 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList, confi
       case (_: IntType, _: IntType, Ast.operator.Div) =>
         s"Math.floor(${super.genericBinOp(left, op, right, 0)})"
       case (_: IntType, _: IntType, Ast.operator.Mod) =>
-        s"${TypeScriptCompiler.kstreamName}.mod(${translate(left)}, ${translate(right)})"
+        s"${compilerStatic.kstreamName}.mod(${translate(left)}, ${translate(right)})"
       case (_: IntType, _: IntType, Ast.operator.RShift) =>
         genericBinOpStr(left, op, ">>>", right, extPrec)
       case _ =>
@@ -41,7 +43,7 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList, confi
   }
 
   override def anyField(value: Ast.expr, attrName: String): String =
-    s"${translate(value, METHOD_PRECEDENCE)}!.${doName(attrName)}"
+    s"${translate(value, METHOD_PRECEDENCE)}${compilerStatic.memberAccess}${doName(attrName)}"
 
   override def doLocalName(s: String): String = {
     s match {
@@ -60,15 +62,15 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList, confi
   }
 
   override def doInternalName(id: Identifier): String =
-    TypeScriptCompiler.privateMemberName(id)
+    compilerStatic.privateMemberName(id)
 
   override def doEnumByLabel(enumSpec: EnumSpec, label: String): String = {
     val isExternal = enumSpec.isExternal(provider.nowClass)
     if (isExternal) {
-      val className = TypeScriptCompiler.type2class(enumSpec.name.head)
-      TypeScriptCompiler.importClass(importList, List(className))
+      val className = compilerStatic.type2class(enumSpec.name.head)
+      compilerStatic.importClass(importList, List(className))
     }
-    s"${TypeScriptCompiler.types2class(enumSpec.name)}.${Utils.upperUnderscoreCase(label)}"
+    s"${compilerStatic.types2class(enumSpec.name)}.${Utils.upperUnderscoreCase(label)}"
   }
 
   override def doEnumById(enumSpec: EnumSpec, id: String): String =
@@ -76,13 +78,13 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList, confi
     id
 
   override def doBytesCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr, extPrec: Int): String =
-    s"(${TypeScriptCompiler.kstreamName}.byteArrayCompare(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
+    s"(${compilerStatic.kstreamName}.byteArrayCompare(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
   override def arraySubscript(container: expr, idx: expr): String =
     s"${translate(container)}[${translate(idx)}]"
   override def doIfExp(condition: expr, ifTrue: expr, ifFalse: expr): String =
     s"(${translate(condition)} ? ${translate(ifTrue)} : ${translate(ifFalse)})"
   override def doCast(value: Ast.expr, typeName: DataType): String =
-    TypeScriptCompiler.castIfNeeded(translate(value), AnyType, typeName, config)
+    compilerStatic.castIfNeeded(translate(value), AnyType, typeName, config)
 
   // Predefined methods of various types
   override def strToInt(s: expr, base: expr): String =
@@ -122,10 +124,10 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList, confi
     s"(${translate(i)}).toString()"
 
   override def bytesToStr(bytesExpr: String, encoding: String): String =
-    s"""${TypeScriptCompiler.kstreamName}.bytesToStr($bytesExpr, ${doStringLiteral(encoding)})"""
+    s"""${compilerStatic.kstreamName}.bytesToStr($bytesExpr, ${doStringLiteral(encoding)})"""
 
   override def strLength(s: expr): String =
-    s"${translate(s, METHOD_PRECEDENCE)}!.length"
+    s"${translate(s, METHOD_PRECEDENCE)}${compilerStatic.memberAccess}length"
 
   // https://stackoverflow.com/a/36525647/2055163
   override def strReverse(s: expr): String =
@@ -135,10 +137,10 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList, confi
     s"${translate(s, METHOD_PRECEDENCE)}.substring(${translate(from)}, ${translate(to)})"
 
   override def bytesIndexOf(b: Ast.expr, byte: Ast.expr): String =
-    s"${TypeScriptCompiler.kstreamName}.byteArrayIndexOf(${translate(b)}, ${translate(byte)})"
+    s"${compilerStatic.kstreamName}.byteArrayIndexOf(${translate(b)}, ${translate(byte)})"
 
   override def strToBytes(s: expr, encoding: expr): String =
-    s"${TypeScriptCompiler.kstreamName}.strToBytes(${translate(s)}, ${translate(encoding)})"
+    s"${compilerStatic.kstreamName}.strToBytes(${translate(s)}, ${translate(encoding)})"
 
   override def arrayFirst(a: expr): String =
     s"${translate(a)}[0]"
@@ -147,11 +149,11 @@ class TypeScriptTranslator(provider: TypeProvider, importList: ImportList, confi
     s"$v[$v.length - 1]"
   }
   override def arraySize(a: expr): String =
-    s"${translate(a, METHOD_PRECEDENCE)}!.length"
+    s"${translate(a, METHOD_PRECEDENCE)}${compilerStatic.memberAccess}length"
   override def arrayMin(a: expr): String =
-    s"${TypeScriptCompiler.kstreamName}.arrayMin(${translate(a)})"
+    s"${compilerStatic.kstreamName}.arrayMin(${translate(a)})"
   override def arrayMax(a: expr): String =
-    s"${TypeScriptCompiler.kstreamName}.arrayMax(${translate(a)})"
+    s"${compilerStatic.kstreamName}.arrayMax(${translate(a)})"
 
   override def kaitaiStreamEof(value: Ast.expr): String =
     s"${translate(value, METHOD_PRECEDENCE)}.isEof()"

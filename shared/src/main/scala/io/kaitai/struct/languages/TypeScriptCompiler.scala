@@ -22,7 +22,11 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     with EveryWriteIsExpression
     with GenericChecks
     with SwitchIfOps {
-  import TypeScriptCompiler._
+
+  protected def static: TypeScriptCompilerStatic = TypeScriptCompiler
+  protected def memberAccess: String = static.memberAccess
+  protected def kstructName: String = static.kstructName
+  protected def kstreamName: String = static.kstreamName
 
   override val translator: TypeScriptTranslator = new TypeScriptTranslator(typeProvider, importList, config)
 
@@ -57,35 +61,40 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def externalTypeDeclaration(extType: ExternalType): Unit = {
     val className = type2class(extType.name.head)
-    importClass(importList, List(className))
+    static.importClass(importList, List(className))
   }
 
   override def classHeader(name: List[String]): Unit = {
+    if (name.length > 1) {
+      out.puts(s"export namespace ${static.types2class(name.dropRight(1))} {")
+      out.inc
+    }
+
+    out.puts(s"export class ${type2class(name.last)} extends $kstructName {")
+    out.inc
+    classPrivateMembers()
+    out.puts
+  }
+
+  protected def classPrivateMembers(): Unit = {
     val isHybrid = typeProvider.nowClass.meta.endian match {
       case Some(_: CalcEndian) | Some(InheritedEndian) => true
       case _ => false
     }
-
-    openNamespace(name.dropRight(1))
-
-    out.puts(
-      s"export class ${type2class(name.last)} " +
-        s"extends ${kstructNameFull(config)} {"
-    )
-    out.inc
 
     if (isHybrid)
       out.puts(renderMemberDeclaration("#_is_le", "boolean", isNullable = true))
 
     if (config.readStoresPos)
       out.puts(renderMemberDeclaration("_debug", s"Record<string, $kstructName.Debug>", isNullable = false, "{}"))
-
-    out.puts
   }
 
   override def classFooter(name: List[String]): Unit = {
     universalFooter
-    closeNamespace(name.dropRight(1))
+
+    if (name.length > 1) {
+      universalFooter
+    }
   }
 
   override def classConstructorHeader(
@@ -96,12 +105,12 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
      params: List[ParamDefSpec]
    ): Unit = {
     val mainParamsList = List(
-      s"_io: ${tsType(KaitaiStreamType)}",
-      s"_parent?: ${tsType(parentClassName)}",
-      s"_root?: ${tsType(CalcUserType(rootClassName, None))}",
-      if (isHybrid) s"_is_le?: boolean" else ""
+      renderParam("_io", tsType(KaitaiStreamType)),
+      renderOptionalParam("_parent", tsType(parentClassName)),
+      renderOptionalParam("_root", tsType(CalcUserType(rootClassName, None))),
+      if (isHybrid) renderOptionalParam("_is_le", "boolean") else ""
     )
-    val additionalParamsList = params.map((p) => s"${paramName(p.id)}: ${tsType(p.dataType)}");
+    val additionalParamsList = params.map((p) => renderParam(paramName(p.id), tsType(p.dataType)));
     val constructorArgs = (mainParamsList ++ additionalParamsList).filter(_.nonEmpty).mkString(", ")
 
     out.puts(s"constructor($constructorArgs) {")
@@ -191,7 +200,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     universalFooter
 
   override def attrInvokeFetchInstances(baseExpr: Ast.expr, exprType: DataType, dataType: DataType): Unit = {
-    out.puts(s"${expression(baseExpr)}!._fetchInstances();")
+    out.puts(s"${expression(baseExpr)}${memberAccess}_fetchInstances();")
   }
 
   override def attrInvokeInstance(instName: InstanceIdentifier): Unit = {
@@ -338,7 +347,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val expr = if (isLeft) expression(rotValue) else s"8 - (${expression(rotValue)})"
         s"$kstreamName.processRotateLeft($srcExpr, $expr, 1)"
       case ProcessCustom(name, args) =>
-        importClass(importList, name)
+        static.importClass(importList, name)
         val procClass = type2class(name.last)
         out.puts(s"const _process = new $procClass(${args.map(expression).mkString(", ")});")
         s"_process.decode($srcExpr)"
@@ -364,7 +373,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case ProcessCustom(name, args) =>
         val procName = s"_process_${idToStr(varSrc)}"
         if (!translator.inSubIOWriteBackHandler) {
-          importClass(importList, name)
+          static.importClass(importList, name)
           val procClass = type2class(name.last)
           out.puts(s"const $procName = new $procClass(${args.map(expression).mkString(", ")});")
         }
@@ -381,7 +390,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         out.puts(s"const _processRotateArg = ${expression(rotValue)};")
       case ProcessZlib => // no process arguments
       case ProcessCustom(name, args) =>
-        importClass(importList, name)
+        static.importClass(importList, name)
         val procClass = type2class(name.last)
         out.puts(s"const _process_${idToStr(varSrc)} = new $procClass(${args.map(expression).mkString(", ")});")
     }
@@ -458,7 +467,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
 
     val enumNameProps = attrType match {
-      case t: EnumType => s"""enumName: "${types2class(t.enumSpec.get.name)}""""
+      case t: EnumType => s"""enumName: "${static.types2class(t.enumSpec.get.name)}""""
       case _ => ""
     }
 
@@ -597,7 +606,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           case _ => ""
         }
         val addParams = Utils.join(t.args.map((a) => translator.translate(a)), ", ", ", ", "")
-        s"new ${tsUserTypeName(t)}($io, $parent, $root$addEndian$addParams)"
+        s"new ${static.tsUserTypeName(t)}($io, $parent, $root$addEndian$addParams)"
     }
   }
 
@@ -813,7 +822,9 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def enumDeclaration(curClass: List[String], enumName: String, enumColl: Seq[(Long, EnumValueSpec)]): Unit = {
-    openNamespace(curClass)
+    out.puts(s"export namespace ${static.types2class(curClass)} {")
+    out.inc
+
     out.puts(s"export enum ${type2class(enumName)} {")
     out.inc
     enumColl.foreach { case (id, label) =>
@@ -821,7 +832,10 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
     out.dec
     out.puts("}")
-    closeNamespace(curClass)
+
+    out.dec
+    out.puts("}")
+
     out.puts
   }
 
@@ -829,7 +843,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def debugClassSequence(seq: List[AttrSpec]): Unit = {
     val seqStr = seq.map((attr) => "\"" + idToStr(attr.id) + "\"").mkString(", ")
-    out.puts(renderStaticDeclaration(s"_seqFields", "string[]", isNullable = false, s"[$seqStr]"))
+    out.puts("static " + renderMemberDeclaration(s"_seqFields", "string[]", isNullable = false, s"[$seqStr]"))
   }
 
   override def classToString(toStringExpr: Ast.expr): Unit = {
@@ -865,7 +879,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     out.puts(s"$io.writeBytesLimit(${expression(expr)}, $size, $term, $padRight);")
 
   override def attrUserTypeInstreamWrite(io: String, valueExpr: Ast.expr, dataType: DataType, exprType: DataType): Unit =
-    out.puts(s"${expression(valueExpr)}!._write_Seq($io);")
+    out.puts(s"${expression(valueExpr)}${memberAccess}_write_Seq($io);")
 
   override def exprStreamToByteArray(io: String): String =
     s"$io.toByteArray()"
@@ -976,7 +990,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     err: ValidationNotInEnumError,
     useIo: Boolean
   ): Unit = {
-    val enumRef = tsEnumTypeName(et)
+    val enumRef = static.tsEnumTypeName(et)
     attrValidate(attr, s"!Object.prototype.hasOwnProperty.call($enumRef, ${translator.translate(valueExpr)})", err, useIo, valueExpr, None)
   }
 
@@ -1018,25 +1032,40 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     s"this._debug.${idToStr(attrId)}$arrIndexExpr"
   }
 
-  private def renderParam(name: String, typeName: String): String =
+  protected def renderParam(name: String, typeName: String): String =
     s"$name: $typeName"
 
-  private def renderOptionalParam(name: String, typeName: String): String =
+  protected def renderOptionalParam(name: String, typeName: String): String =
     s"$name?: $typeName"
 
-  private def renderMethodHeader(name: String, params: Seq[String], returnType: Option[String], accessModifier: Option[String] = None): String = {
+  protected def renderMethodHeader(
+    name: String,
+    params: Seq[String],
+    returnType: Option[String],
+    accessModifier: Option[String] = None
+  ): String = {
     val accessPrefix = accessModifier.map(_ + " ").getOrElse("")
     val returnSuffix = returnType.map(t => s": $t").getOrElse("")
     s"$accessPrefix$name(${params.mkString(", ")})$returnSuffix {"
   }
 
-  private def renderVariableDeclaration(varName: String, varType: String, isConst: Boolean = false, value: String = ""): String = {
+  protected def renderVariableDeclaration(
+   varName: String,
+   varType: String,
+   isConst: Boolean = false,
+   value: String = ""
+ ): String = {
     val assignType = if (isConst) "const" else "let"
     val assignValue = if (value.nonEmpty) s" = $value" else ""
     s"$assignType $varName: $varType$assignValue;"
   }
 
-  private def renderMemberDeclaration(memberName: String, memberType: String, isNullable: Boolean = false, value: String = ""): String = {
+  protected def renderMemberDeclaration(
+   memberName: String,
+   memberType: String,
+   isNullable: Boolean = false,
+   value: String = ""
+ ): String = {
     val modifier = if (isNullable) {
       "?"
     } else if (!isNullable && value != "") {
@@ -1047,40 +1076,15 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val assignValue = if (value.nonEmpty) s" = $value" else ""
     s"$memberName$modifier: $memberType$assignValue;"
   }
-
-  private def renderStaticDeclaration(memberName: String, memberType: String, isNullable: Boolean = false, value: String = ""): String = {
-    val modifier = if (isNullable) {
-      "?"
-    } else if (!isNullable && value != "") {
-      ""
-    } else {
-      "!"
-    }
-    val assignValue = if (value.nonEmpty) s" = $value" else ""
-    s"static $memberName$modifier: $memberType$assignValue;"
-  }
-
-  private def openNamespace(names: List[String]): Unit =
-    names.foreach { name =>
-      out.puts(s"export namespace ${type2class(name)} {")
-      out.inc
-    }
-
-  private def closeNamespace(names: List[String]): Unit =
-    names.reverse.foreach { _ =>
-      out.dec
-      out.puts("}")
-    }
 }
 
-object TypeScriptCompiler extends LanguageCompilerStatic
+trait TypeScriptCompilerStatic extends LanguageCompilerStatic
   with UpperCamelCaseClasses
   with StreamStructNames
   with ExceptionNames {
-  override def getCompiler(
-    tp: ClassTypeProvider,
-    config: RuntimeConfig
-  ): LanguageCompiler = new TypeScriptCompiler(tp, config)
+
+  // We must use non-null assertions for all member accesses because we cannot detect where they are not needed.
+  val memberAccess: String = "!."
 
   def importClass(importList: ImportList, name: List[String]): Unit = {
     val procClass = type2class(name.last)
@@ -1134,12 +1138,12 @@ object TypeScriptCompiler extends LanguageCompilerStatic
     }
   }
 
-  private def tsUserTypeName(t: UserType): String = {
+  def tsUserTypeName(t: UserType): String = {
     val resolvedName = t.classSpec.map(_.name).getOrElse(t.name)
     types2class(resolvedName)
   }
 
-  private def tsEnumTypeName(t: EnumType): String = {
+  def tsEnumTypeName(t: EnumType): String = {
     val resolvedName = t.enumSpec.map(_.name).getOrElse(t.name)
     types2class(resolvedName)
   }
@@ -1181,4 +1185,11 @@ object TypeScriptCompiler extends LanguageCompilerStatic
       case (true, false) => ""
     })
   }
+}
+
+object TypeScriptCompiler extends TypeScriptCompilerStatic {
+  override def getCompiler(
+    tp: ClassTypeProvider,
+    config: RuntimeConfig
+  ): LanguageCompiler = new TypeScriptCompiler(tp, config)
 }
