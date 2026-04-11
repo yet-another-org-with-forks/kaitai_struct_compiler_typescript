@@ -944,13 +944,13 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def condIfIsEofFooter: Unit = condIfFooter
 
   private def tsType(attrType: DataType, isNullable: Boolean = false): String =
-    TypeScriptCompiler.tsType(attrType, isNullable, config)
+    static.tsType(attrType, isNullable, config)
 
   override def castIfNeeded(expr: String, exprType: DataType, targetType: DataType): String =
-    TypeScriptCompiler.castIfNeeded(expr, exprType, targetType, config)
+    static.castIfNeeded(expr, exprType, targetType, config)
 
   override def idToStr(id: Identifier): String =
-    TypeScriptCompiler.idToStr(id)
+    static.idToStr(id)
 
   override def publicMemberName(id: Identifier): String =
     id match {
@@ -965,13 +965,13 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
 
   override def privateMemberName(id: Identifier): String =
-    TypeScriptCompiler.privateMemberName(id)
+    static.privateMemberName(id)
 
   override def localTemporaryName(id: Identifier): String =
     s"_t_${idToStr(id)}"
 
   override def ksErrorName(err: KSError): String =
-    TypeScriptCompiler.ksErrorName(err)
+    static.ksErrorName(err)
 
   override def attrValidateExpr(
     attr: AttrLikeSpec,
