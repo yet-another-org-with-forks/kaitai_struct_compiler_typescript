@@ -70,7 +70,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       out.inc
     }
 
-    out.puts(s"export class ${type2class(name.last)} extends $kstructName {")
+    out.puts(s"export class ${type2class(name.last)} extends ${static.kstructNameFull(config)} {")
     out.inc
     classPrivateMembers()
     out.puts

@@ -27,9 +27,9 @@ class JavaScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def classHeader(name: List[String]): Unit = {
     if (name.length > 1) {
-      out.puts(s"static ${type2class(name.last)} = class extends $kstructName {")
+      out.puts(s"static ${type2class(name.last)} = class extends ${static.kstructNameFull(config)} {")
     } else {
-      out.puts(s"export class ${type2class(name.last)} extends $kstructName {")
+      out.puts(s"export class ${type2class(name.last)} extends ${static.kstructNameFull(config)} {")
     }
 
     out.inc
