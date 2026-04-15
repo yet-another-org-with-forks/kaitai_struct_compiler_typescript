@@ -65,10 +65,7 @@ class JavaScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     out.puts
   }
 
-  override def renderParam(name: String, typeName: String): String =
-    name
-
-  override def renderOptionalParam(name: String, typeName: String): String =
+  override def renderParam(name: String, typeName: String, isOptional: Boolean = false): String =
     name
 
   override def renderMethodHeader(
@@ -94,7 +91,7 @@ class JavaScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def renderMemberDeclaration(
     memberName: String,
     memberType: String,
-    isNullable: Boolean = false,
+    isOptional: Boolean = false,
     value: String = ""
   ): String = {
     val assignValue = if (value.nonEmpty) s" = $value" else ""

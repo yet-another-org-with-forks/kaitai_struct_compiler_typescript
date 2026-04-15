@@ -203,6 +203,8 @@ class ClassCompiler(
     */
   def compileAttrDeclarations(attrs: List[MemberSpec]): Unit = {
     attrs.foreach { (attr) =>
+      if (!attr.doc.isEmpty && !lang.innerDocstrings)
+        lang.attributeDeclarationDoc(attr.id, attr.doc)
       val isNullable = if (lang.switchBytesOnlyAsRaw) {
         attr.isNullableSwitchRaw
       } else {

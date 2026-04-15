@@ -115,6 +115,7 @@ abstract class LanguageCompiler(
   def readFooter(): Unit
 
   def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit
+  def attributeDeclarationDoc(id: Identifier, doc: DocSpec): Unit = {}
   def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit
   def attributeSetter(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = ???
   def attributeDoc(id: Identifier, doc: DocSpec): Unit = {}

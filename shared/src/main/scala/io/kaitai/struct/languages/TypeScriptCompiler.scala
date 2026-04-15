@@ -9,6 +9,8 @@ import io.kaitai.struct.languages.components._
 import io.kaitai.struct.translators.TypeScriptTranslator
 import io.kaitai.struct.{ClassTypeProvider, ExternalType, ImportList, RuntimeConfig, Utils}
 
+import scala.collection.mutable.ListBuffer
+
 class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   extends LanguageCompiler(typeProvider, config)
     with ObjectOrientedLanguage
@@ -83,10 +85,10 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
 
     if (isHybrid)
-      out.puts(renderMemberDeclaration("#_is_le", "boolean", isNullable = true))
+      out.puts(renderMemberDeclaration("#_is_le", "boolean", isOptional = true))
 
     if (config.readStoresPos)
-      out.puts(renderMemberDeclaration("_debug", s"Record<string, $kstructName.Debug>", isNullable = false, "{}"))
+      out.puts(renderMemberDeclaration("_debug", s"Record<string, $kstructName.Debug>", isOptional = false, "{}"))
   }
 
   override def classFooter(name: List[String]): Unit = {
@@ -106,22 +108,22 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
    ): Unit = {
     val mainParamsList = List(
       renderParam("_io", tsType(KaitaiStreamType)),
-      renderOptionalParam("_parent", tsType(parentClassName)),
-      renderOptionalParam("_root", tsType(CalcUserType(rootClassName, None))),
-      if (isHybrid) renderOptionalParam("_is_le", "boolean") else ""
+      renderParam("_parent", tsType(parentClassName), isOptional = true),
+      renderParam("_root", tsType(CalcUserType(rootClassName, None)), isOptional = true),
+      if (isHybrid) renderParam("_is_le", "boolean", isOptional = true) else ""
     )
-    val additionalParamsList = params.map((p) => renderParam(paramName(p.id), tsType(p.dataType)));
+    val additionalParamsList = params.map((p) => renderParam(paramName(p.id), tsType(p.dataType), isOptional = true));
     val constructorArgs = (mainParamsList ++ additionalParamsList).filter(_.nonEmpty).mkString(", ")
 
     out.puts(s"constructor($constructorArgs) {")
     out.inc
     out.puts("super(_io);")
-    out.puts("this.#_parent = _parent;")
+    out.puts("this._parent = _parent;")
 
     if (name == rootClassName) {
-      out.puts("this.#_root = _root ?? this;")
+      out.puts("this._root = _root ?? this;")
     } else {
-      out.puts("this.#_root = _root;")
+      out.puts("this._root = _root;")
     }
 
     if (isHybrid)
@@ -185,7 +187,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def readFooter(): Unit = {
     if (config.readWrite) {
-      out.puts("this._setDirty(false);")
+      out.puts("this._dirty = false;")
     }
     universalFooter
   }
@@ -214,7 +216,8 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         out.puts(renderMethodHeader(s"_write_Seq${Utils.upperUnderscoreCase(e.toSuffix)}", Nil, Some("void"), Some("private")))
         out.inc
       case None =>
-        out.puts(renderMethodHeader("_write_Seq", List(renderOptionalParam("io", tsType(KaitaiStreamType))), Some("void")))
+        val args = List(renderParam("io", tsType(KaitaiStreamType), isOptional = true))
+        out.puts(renderMethodHeader("_write_Seq", args, Some("void")))
         out.inc
         out.puts("super._write_Seq(io);")
     }
@@ -227,7 +230,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def checkFooter(): Unit = {
-    out.puts("this._setDirty(false);")
+    out.puts("this._dirty = false;")
     universalFooter
   }
 
@@ -261,41 +264,19 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     attrName match {
       case IoIdentifier => // already declared in class header
       case _ =>
-        out.puts(renderMemberDeclaration(s"#${idToStr(attrName)}", tsType(attrType), isNullableCorrected))
+        out.puts(renderMemberDeclaration(s"${publicMemberName(attrName)}", tsType(attrType, isNullableCorrected), isNullableCorrected))
     }
   }
 
-  override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
-    attrName match {
-      case IoIdentifier => // direct access to class members
-      case _ =>
-        out.puts(s"get ${publicMemberName(attrName)}() {")
-        out.inc
-        out.puts(s"return ${privateMemberName(attrName)};")
-        universalFooter
-    }
+  override def attributeDeclarationDoc(id: Identifier, doc: DocSpec): Unit = {
+    universalDoc(doc)
   }
 
-  override def attributeSetter(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
-    // At the time of writing, `_root` and `_parent` are considered non-nullable, but in reality
-    // they can always be `null`.
-    val isNullableCorrected =
-      if (attrName == RootIdentifier || attrName == ParentIdentifier) {
-        true
-      } else {
-        isNullable
-      }
-    attrName match {
-      case IoIdentifier => // direct access to class members
-      case _ =>
-        val setterValueParam = renderParam("v", tsType(attrType, isNullableCorrected))
-        out.puts(s"set ${publicMemberName(attrName)}($setterValueParam) {")
-        out.inc
-        out.puts("this._setDirty(true); ")
-        handleAssignmentSimple(attrName, "v")
-        universalFooter
-    }
-  }
+  override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = { }
+
+  override def attributeSetter(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = { }
+
+  override def attributeDoc(id: Identifier, doc: DocSpec): Unit = { }
 
   override def attrSetProperty(base: Ast.expr, propName: Identifier, value: String): Unit = {
     out.puts(s"${expression(base)}.${publicMemberName(propName)} = $value;")
@@ -349,8 +330,9 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case ProcessCustom(name, args) =>
         static.importClass(importList, name)
         val procClass = type2class(name.last)
-        out.puts(s"const _process = new $procClass(${args.map(expression).mkString(", ")});")
-        s"_process.decode($srcExpr)"
+        val procVarName = s"_process_${idToStr(varSrc)}"
+        out.puts(s"const $procVarName = new $procClass(${args.map(expression).mkString(", ")});")
+        s"$procVarName.decode($srcExpr)"
     }
   }
 
@@ -599,7 +581,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             case Some(fp) => translator.translate(fp)
             case None => "this"
           }
-          (parent, "this.#_root")
+          (parent, "this._root")
         }
         val addEndian = t.classSpec.get.meta.endian match {
           case Some(InheritedEndian) => ", this.#_is_le"
@@ -747,12 +729,12 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def instanceDeclaration(attrName: InstanceIdentifier, attrType: DataType, isNullable: Boolean): Unit = {
     // Actually instance members always nullable
-    out.puts(renderMemberDeclaration(s"#${idToStr(attrName)}", tsType(attrType), isNullable = true))
+    out.puts(renderMemberDeclaration(s"#${idToStr(attrName)}", tsType(attrType, isNullable = true), isOptional = true))
   }
 
   override def instanceWriteFlagDeclaration(attrName: InstanceIdentifier): Unit = {
-    out.puts(renderMemberDeclaration(s"#_shouldWrite${idToSetterStr(attrName)}", "boolean", isNullable = false, "false"))
-    out.puts(renderMemberDeclaration(s"#_enabled${idToSetterStr(attrName)}", "boolean", isNullable = false, "true"))
+    out.puts(renderMemberDeclaration(s"#_shouldWrite${idToSetterStr(attrName)}", "boolean", isOptional = false, "false"))
+    out.puts(renderMemberDeclaration(s"#_enabled${idToSetterStr(attrName)}", "boolean", isOptional = false, "true"))
   }
 
   override def instanceSetWriteFlag(instName: InstanceIdentifier): Unit = {
@@ -766,7 +748,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def instanceEnabledSetter(instName: InstanceIdentifier): Unit = {
     out.puts(renderMethodHeader(s"set${idToSetterStr(instName)}Enabled", List(renderParam("v", "boolean")), Some("void")))
     out.inc
-    out.puts("this._setDirty(true);")
+    out.puts("this._dirty = true;")
     out.puts(s"this.#_enabled${idToSetterStr(instName)} = v;")
     universalFooter
   }
@@ -843,7 +825,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def debugClassSequence(seq: List[AttrSpec]): Unit = {
     val seqStr = seq.map((attr) => "\"" + idToStr(attr.id) + "\"").mkString(", ")
-    out.puts("static " + renderMemberDeclaration(s"_seqFields", "string[]", isNullable = false, s"[$seqStr]"))
+    out.puts("static " + renderMemberDeclaration(s"_seqFields", "string[]", isOptional = false, s"[$seqStr]"))
   }
 
   override def classToString(toStringExpr: Ast.expr): Unit = {
@@ -888,7 +870,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val msgStr = expression(Ast.expr.Str(msg))
     out.puts(s"if (${expression(checkExpr)}) {")
     out.inc
-    out.puts(s"throw new $kstreamName.ConsistencyError($msgStr, ${expression(expected)}, ${expression(actual)});")
+    out.puts(s"throw new $kstructName.ConsistencyError($msgStr, ${expression(expected)}, ${expression(actual)});")
     out.dec
     out.puts("}")
   }
@@ -899,7 +881,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val msgStr = expression(Ast.expr.Str(msg))
     out.puts(s"if ($actualStr !== $expectedStr) {")
     out.inc
-    out.puts(s"throw new $kstreamName.ConsistencyError($msgStr, $expectedStr, $actualStr);")
+    out.puts(s"throw new $kstructName.ConsistencyError($msgStr, $expectedStr, $actualStr);")
     out.dec
     out.puts("}")
   }
@@ -918,7 +900,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val msgStr = expression(Ast.expr.Str(msg))
     out.puts(s"if (${expression(actualParentExpr)} !== $expectedParent) {")
     out.inc
-    out.puts(s"throw new $kstreamName.ConsistencyError($msgStr, $expectedParent, ${expression(actualParentExpr)});")
+    out.puts(s"throw new $kstructName.ConsistencyError($msgStr, $expectedParent, ${expression(actualParentExpr)});")
     out.dec
     out.puts("}")
   }
@@ -929,7 +911,7 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val ifExpr = if (expectedIsEof) s"!($eofExpr)" else eofExpr
     out.puts(s"if ($ifExpr) {")
     out.inc
-    out.puts(s"throw new $kstreamName.ConsistencyError($msgStr, 0, ${exprIORemainingSize(io)});")
+    out.puts(s"throw new $kstructName.ConsistencyError($msgStr, 0, ${exprIORemainingSize(io)});")
     out.dec
     out.puts("}")
   }
@@ -1032,11 +1014,8 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     s"this._debug.${idToStr(attrId)}$arrIndexExpr"
   }
 
-  protected def renderParam(name: String, typeName: String): String =
-    s"$name: $typeName"
-
-  protected def renderOptionalParam(name: String, typeName: String): String =
-    s"$name?: $typeName"
+  protected def renderParam(name: String, typeName: String, isOptional: Boolean = false): String =
+    s"$name${if (isOptional) "?" else ""}: $typeName"
 
   protected def renderMethodHeader(
     name: String,
@@ -1063,12 +1042,12 @@ class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   protected def renderMemberDeclaration(
    memberName: String,
    memberType: String,
-   isNullable: Boolean = false,
+   isOptional: Boolean = false,
    value: String = ""
  ): String = {
-    val modifier = if (isNullable) {
+    val modifier = if (isOptional) {
       "?"
-    } else if (!isNullable && value != "") {
+    } else if (!isOptional && value != "") {
       ""
     } else {
       "!"
@@ -1089,7 +1068,7 @@ trait TypeScriptCompilerStatic extends LanguageCompilerStatic
   def importClass(importList: ImportList, name: List[String]): Unit = {
     val procClass = type2class(name.last)
     val nameInit = name.init
-    val pkgName = if (nameInit.isEmpty) "" else nameInit.map(type2class).mkString(".")
+    val pkgName = if (nameInit.isEmpty) "" else nameInit.mkString("-")
     if (pkgName.isEmpty) {
       importList.add(s"""import { $procClass } from "./$procClass.js";""")
     } else {
@@ -1163,7 +1142,8 @@ trait TypeScriptCompilerStatic extends LanguageCompilerStatic
   def privateMemberName(id: Identifier): String =
     id match {
       case IoIdentifier => s"this._io"
-      case _ => s"this.#${idToStr(id)}"
+      case InstanceIdentifier(_) => s"this.#${idToStr(id)}"
+      case _ => s"this.${idToStr(id)}"
     }
 
   override def kstreamName: String = "KaitaiStream"
