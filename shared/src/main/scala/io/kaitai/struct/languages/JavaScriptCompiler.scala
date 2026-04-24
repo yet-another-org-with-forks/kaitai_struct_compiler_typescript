@@ -7,7 +7,7 @@ import io.kaitai.struct.translators.JavaScriptTranslator
 import io.kaitai.struct.{ClassTypeProvider, RuntimeConfig, Utils}
 
 /**
- * The current implementation extends TypeScriptCompiler with the following differences:
+ * The current implementation similar to TypeScript with the following differences:
  * - Any type/type-cast declarations are removed
  * - No not-null assertion for member access
  * - Frozen objects instead of enums
@@ -15,9 +15,9 @@ import io.kaitai.struct.{ClassTypeProvider, RuntimeConfig, Utils}
  * - Output extension is .js instead of .ts
  */
 class JavaScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
-  extends TypeScriptCompiler(typeProvider, config) {
+  extends ECMAScriptCompiler(typeProvider, config) {
 
-  override def static: TypeScriptCompilerStatic = JavaScriptCompiler
+  override def static: ECMAScriptCompilerStatic = JavaScriptCompiler
   override def innerClasses: Boolean = true
   override def innerEnums: Boolean = true
 
@@ -99,7 +99,7 @@ class JavaScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 }
 
-object JavaScriptCompiler extends TypeScriptCompilerStatic {
+object JavaScriptCompiler extends ECMAScriptCompilerStatic {
   override def getCompiler(
     tp: ClassTypeProvider,
     config: RuntimeConfig
@@ -107,6 +107,9 @@ object JavaScriptCompiler extends TypeScriptCompilerStatic {
 
   override val memberAccess: String = "."
 
+  override def kaitaiType2NativeType(attrType: DataType, isNullable: Boolean = false, config: RuntimeConfig): String =
+    ""
+
   override def castIfNeeded(expr: String, exprType: DataType, targetType: DataType, config: RuntimeConfig): String =
-      expr
+    expr
 }
