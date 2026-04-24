@@ -1,6 +1,5 @@
 package io.kaitai.struct.translators
 
-import io.kaitai.struct.datatype.DataType
 import io.kaitai.struct.datatype.DataType._
 import io.kaitai.struct.exprlang.Ast
 import io.kaitai.struct.exprlang.Ast.expr
@@ -68,7 +67,7 @@ abstract class ECMAScriptTranslator(provider: TypeProvider, importList: ImportLi
     val isExternal = enumSpec.isExternal(provider.nowClass)
     if (isExternal) {
       val className = compilerStatic.type2class(enumSpec.name.head)
-      compilerStatic.importClass(importList, List(className))
+      compilerStatic.importClass(importList, List(className), config)
     }
     s"${compilerStatic.types2class(enumSpec.name)}.${Utils.upperUnderscoreCase(label)}"
   }

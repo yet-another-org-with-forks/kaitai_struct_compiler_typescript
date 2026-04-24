@@ -63,7 +63,7 @@ abstract class ECMAScriptCompiler(typeProvider: ClassTypeProvider, config: Runti
 
   override def externalTypeDeclaration(extType: ExternalType): Unit = {
     val className = type2class(extType.name.head)
-    static.importClass(importList, List(className))
+    static.importClass(importList, List(className), config)
   }
 
   protected def classPrivateMembers(): Unit = {
@@ -308,7 +308,7 @@ abstract class ECMAScriptCompiler(typeProvider: ClassTypeProvider, config: Runti
         val expr = if (isLeft) expression(rotValue) else s"8 - (${expression(rotValue)})"
         s"$kstreamName.processRotateLeft($srcExpr, $expr, 1)"
       case ProcessCustom(name, args) =>
-        static.importClass(importList, name)
+        static.importClass(importList, name, config)
         val procClass = type2class(name.last)
         val procVarName = s"_process_${idToStr(varSrc)}"
         out.puts(s"const $procVarName = new $procClass(${args.map(expression).mkString(", ")});")
@@ -335,7 +335,7 @@ abstract class ECMAScriptCompiler(typeProvider: ClassTypeProvider, config: Runti
       case ProcessCustom(name, args) =>
         val procName = s"_process_${idToStr(varSrc)}"
         if (!translator.inSubIOWriteBackHandler) {
-          static.importClass(importList, name)
+          static.importClass(importList, name, config)
           val procClass = type2class(name.last)
           out.puts(s"const $procName = new $procClass(${args.map(expression).mkString(", ")});")
         }
@@ -352,7 +352,7 @@ abstract class ECMAScriptCompiler(typeProvider: ClassTypeProvider, config: Runti
         out.puts(s"const _processRotateArg = ${expression(rotValue)};")
       case ProcessZlib => // no process arguments
       case ProcessCustom(name, args) =>
-        static.importClass(importList, name)
+        static.importClass(importList, name, config)
         val procClass = type2class(name.last)
         out.puts(s"const _process_${idToStr(varSrc)} = new $procClass(${args.map(expression).mkString(", ")});")
     }
@@ -1007,16 +1007,7 @@ trait ECMAScriptCompilerStatic extends LanguageCompilerStatic
 
   val memberAccess: String
 
-  def importClass(importList: ImportList, name: List[String]): Unit = {
-    val procClass = type2class(name.last)
-    val nameInit = name.init
-    val pkgName = if (nameInit.isEmpty) "" else nameInit.mkString("-")
-    if (pkgName.isEmpty) {
-      importList.add(s"""import { $procClass } from "./$procClass.js";""")
-    } else {
-      importList.add(s"""import { $procClass } from "$pkgName";""")
-    }
-  }
+  def importClass(importList: ImportList, name: List[String], config: RuntimeConfig): Unit
 
   def kaitaiType2NativeType(attrType: DataType, isNullable: Boolean = false, config: RuntimeConfig): String
 

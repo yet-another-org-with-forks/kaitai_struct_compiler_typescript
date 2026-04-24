@@ -5,7 +5,7 @@ import io.kaitai.struct.datatype.DataType.{AnyType, ArrayType, BitsType, Boolean
 import io.kaitai.struct.format.EnumValueSpec
 import io.kaitai.struct.languages.components._
 import io.kaitai.struct.translators.TypeScriptTranslator
-import io.kaitai.struct.{ClassTypeProvider, RuntimeConfig, Utils}
+import io.kaitai.struct.{ClassTypeProvider, ImportList, RuntimeConfig, Utils}
 
 class TypeScriptCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   extends ECMAScriptCompiler(typeProvider, config) {
@@ -103,6 +103,18 @@ object TypeScriptCompiler extends ECMAScriptCompilerStatic {
 
   // We must use non-null assertions for all member accesses because we cannot detect where they are not needed.
   override val memberAccess: String = "!."
+
+  override def importClass(importList: ImportList, name: List[String], config: RuntimeConfig): Unit = {
+    val procClass = type2class(name.last)
+    val nameInit = name.init
+    val pkgName = if (nameInit.isEmpty) "" else nameInit.mkString("-")
+    if (pkgName.isEmpty) {
+      val opaquePath = if (config.typescriptOpaque.isEmpty) "./" else config.typescriptOpaque
+      importList.add(s"""import { $procClass } from "$opaquePath$procClass.js";""")
+    } else {
+      importList.add(s"""import { $procClass } from "$pkgName";""")
+    }
+  }
 
   override def kaitaiType2NativeType(attrType: DataType, isNullable: Boolean = false, config: RuntimeConfig): String = {
     val baseType = attrType match {

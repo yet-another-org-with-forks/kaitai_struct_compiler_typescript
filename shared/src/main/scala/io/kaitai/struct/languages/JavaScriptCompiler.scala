@@ -2,9 +2,10 @@ package io.kaitai.struct.languages
 
 import io.kaitai.struct.datatype.DataType
 import io.kaitai.struct.format.EnumValueSpec
+import io.kaitai.struct.languages.TypeScriptCompiler.type2class
 import io.kaitai.struct.languages.components._
 import io.kaitai.struct.translators.JavaScriptTranslator
-import io.kaitai.struct.{ClassTypeProvider, RuntimeConfig, Utils}
+import io.kaitai.struct.{ClassTypeProvider, ImportList, RuntimeConfig, Utils}
 
 /**
  * The current implementation similar to TypeScript with the following differences:
@@ -106,6 +107,18 @@ object JavaScriptCompiler extends ECMAScriptCompilerStatic {
   ): LanguageCompiler = new JavaScriptCompiler(tp, config)
 
   override val memberAccess: String = "."
+
+  override def importClass(importList: ImportList, name: List[String], config: RuntimeConfig): Unit = {
+    val procClass = type2class(name.last)
+    val nameInit = name.init
+    val pkgName = if (nameInit.isEmpty) "" else nameInit.mkString("-")
+    if (pkgName.isEmpty) {
+      val opaquePath = if (config.javascriptOpaque.isEmpty) "./" else config.javascriptOpaque
+      importList.add(s"""import { $procClass } from "$opaquePath$procClass.js";""")
+    } else {
+      importList.add(s"""import { $procClass } from "$pkgName";""")
+    }
+  }
 
   override def kaitaiType2NativeType(attrType: DataType, isNullable: Boolean = false, config: RuntimeConfig): String =
     ""
