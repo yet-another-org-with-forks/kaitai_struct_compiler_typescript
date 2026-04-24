@@ -129,6 +129,14 @@ object JavaMain {
         c.copy(runtime = c.runtime.copy(nimOpaque = x))
       } text("Directory of opaque Nim modules (Nim only, default: directory of generated module)")
 
+      opt[String]("javascript-opaque") valueName("<module>") action { (x, c) =>
+        c.copy(runtime = c.runtime.copy(javascriptOpaque = x))
+      } text("Directory of opaque JavaScript modules (JavaScript only, default: directory of generated module)")
+
+      opt[String]("typescript-opaque") valueName("<module>") action { (x, c) =>
+        c.copy(runtime = c.runtime.copy(typescriptOpaque = x))
+      } text("Directory of opaque TypeScript modules (TypeScript only, default: directory of generated module)")
+
       opt[Boolean]("opaque-types") action { (x, c) =>
         c.copy(runtime = c.runtime.copy(opaqueTypes = x))
       } text("opaque types allowed, default: false")

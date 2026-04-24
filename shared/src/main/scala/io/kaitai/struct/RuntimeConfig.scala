@@ -92,6 +92,8 @@ case class JavaRuntimeConfig(
   * @param pythonPackage Python package name
   * @param nimModule Path of Nim runtime module
   * @param nimOpaque Directory of opaque Nim modules
+  * @param javascriptOpaque Directory of opaque JavaScript modules
+  * @param typescriptOpaque Directory of opaque TypeScript modules
   */
 case class RuntimeConfig(
   autoRead: Boolean = true,
@@ -106,5 +108,7 @@ case class RuntimeConfig(
   phpNamespace: String = "",
   pythonPackage: String = "",
   nimModule: String = "kaitai_struct_nim_runtime",
-  nimOpaque: String = ""
+  nimOpaque: String = "",
+  javascriptOpaque: String = "",
+  typescriptOpaque: String = ""
 )
