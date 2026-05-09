@@ -104,14 +104,17 @@ object TypeScriptCompiler extends ECMAScriptCompilerStatic {
   // We must use non-null assertions for all member accesses because we cannot detect where they are not needed.
   override val memberAccess: String = "!."
 
-  override def importClass(importList: ImportList, name: List[String], config: RuntimeConfig): Unit = {
+  override def importExternalTypeDeclaration(importList: ImportList, name: String): Unit = {
+    importList.add(s"""import { $name } from "./$name.js";""")
+  }
+
+  override def importProcessor(importList: ImportList, name: List[String], config: RuntimeConfig): Unit = {
     val procClass = type2class(name.last)
-    val nameInit = name.init
-    val pkgName = if (nameInit.isEmpty) "" else nameInit.mkString("-")
-    if (pkgName.isEmpty) {
-      val opaquePath = if (config.typescriptOpaque.isEmpty) "./" else config.typescriptOpaque
-      importList.add(s"""import { $procClass } from "$opaquePath$procClass.js";""")
+    if (name.length == 1) {
+      val path = if (config.typescriptOpaque.isEmpty) "./" else config.typescriptOpaque
+      importList.add(s"""import { $procClass } from "$path$procClass.js";""")
     } else {
+      val pkgName = if (name.init.isEmpty) "" else name.init.mkString("-")
       importList.add(s"""import { $procClass } from "$pkgName";""")
     }
   }

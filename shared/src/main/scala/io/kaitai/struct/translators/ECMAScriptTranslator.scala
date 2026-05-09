@@ -67,7 +67,7 @@ abstract class ECMAScriptTranslator(provider: TypeProvider, importList: ImportLi
     val isExternal = enumSpec.isExternal(provider.nowClass)
     if (isExternal) {
       val className = compilerStatic.type2class(enumSpec.name.head)
-      compilerStatic.importClass(importList, List(className), config)
+      compilerStatic.importExternalTypeDeclaration(importList, className)
     }
     s"${compilerStatic.types2class(enumSpec.name)}.${Utils.upperUnderscoreCase(label)}"
   }
