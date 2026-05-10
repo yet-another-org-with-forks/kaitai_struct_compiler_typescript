@@ -5,7 +5,7 @@ import io.kaitai.struct.datatype.DataType._
 import io.kaitai.struct.datatype._
 import io.kaitai.struct.exprlang.Ast
 import io.kaitai.struct.exprlang.Ast.expr
-import io.kaitai.struct.format._
+import io.kaitai.struct.format.{EndianIdentifier, _}
 import io.kaitai.struct.languages.components._
 import io.kaitai.struct.translators.ECMAScriptTranslator
 
@@ -1041,6 +1041,7 @@ trait ECMAScriptCompilerStatic extends LanguageCompilerStatic
     id match {
       case IoIdentifier => s"this._io"
       case InstanceIdentifier(_) => s"this.#${idToStr(id)}"
+      case EndianIdentifier => s"this.#${idToStr(id)}"
       case _ => s"this.${idToStr(id)}"
     }
 

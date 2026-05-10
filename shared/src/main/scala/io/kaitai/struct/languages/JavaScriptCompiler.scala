@@ -2,7 +2,6 @@ package io.kaitai.struct.languages
 
 import io.kaitai.struct.datatype.DataType
 import io.kaitai.struct.format.EnumValueSpec
-import io.kaitai.struct.languages.TypeScriptCompiler.type2class
 import io.kaitai.struct.languages.components._
 import io.kaitai.struct.translators.JavaScriptTranslator
 import io.kaitai.struct.{ClassTypeProvider, ImportList, RuntimeConfig, Utils}
