@@ -1015,15 +1015,14 @@ trait ECMAScriptCompilerStatic extends LanguageCompilerStatic
 
   def castIfNeeded(expr: String, exprType: DataType, targetType: DataType, config: RuntimeConfig): String
 
-  def userTypeName(t: UserType): String = {
-    val resolvedName = t.classSpec.map(_.name).getOrElse(t.name)
-    types2class(resolvedName)
-  }
+  def userTypeName(t: UserType): String =
+    types2class(t.classSpec match {
+      case Some(cs) => cs.name
+      case None => t.name
+    })
 
-  def enumTypeName(t: EnumType): String = {
-    val resolvedName = t.enumSpec.map(_.name).getOrElse(t.name)
-    types2class(resolvedName)
-  }
+  def enumTypeName(t: EnumType): String =
+    types2class(t.enumSpec.get.name)
 
   def idToStr(id: Identifier): String =
     id match {
