@@ -114,7 +114,7 @@ object JavaScriptCompiler extends ECMAScriptCompilerStatic {
   override def importProcessor(importList: ImportList, name: List[String], config: RuntimeConfig): Unit = {
     val procClass = type2class(name.last)
     if (name.length == 1) {
-      val path = if (config.typescriptOpaque.isEmpty) "./" else config.typescriptOpaque
+      val path = if (config.javascriptOpaque.isEmpty) "./" else config.javascriptOpaque
       importList.add(s"""import { $procClass } from "$path$procClass.js";""")
     } else {
       val pkgName = if (name.init.isEmpty) "" else name.init.mkString("-")
