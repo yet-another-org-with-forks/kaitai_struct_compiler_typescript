@@ -101,7 +101,7 @@ abstract class ECMAScriptCompiler(typeProvider: ClassTypeProvider, config: Runti
     out.puts("this._parent = _parent;")
 
     if (name == rootClassName) {
-      out.puts("this._root = _root ?? this;")
+      out.puts("this._root = _root || this;")
     } else {
       out.puts("this._root = _root;")
     }
