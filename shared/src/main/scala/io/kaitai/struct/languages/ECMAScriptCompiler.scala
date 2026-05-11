@@ -143,11 +143,11 @@ abstract class ECMAScriptCompiler(typeProvider: ClassTypeProvider, config: Runti
     out.puts
     out.puts("if (this.#_is_le === true) {")
     out.inc
-    out.puts("this._writeLe();")
+    out.puts("this._write_SeqLE();")
     out.dec
     out.puts("} else if (this.#_is_le === false) {")
     out.inc
-    out.puts("this._writeBe();")
+    out.puts("this._write_SeqBE();")
     out.dec
     out.puts("} else {")
     out.inc
@@ -376,7 +376,7 @@ abstract class ECMAScriptCompiler(typeProvider: ClassTypeProvider, config: Runti
 
   override def subIOWriteBackHeader(subIO: String, rep: RepeatSpec, process: Option[ProcessExpr]): String = {
     val parentIoName = "parent"
-    out.puts(s"$subIO.writeBackHandler = new $kstreamName.WriteBackHandler(_pos2, ($parentIoName) => {")
+    out.puts(s"$subIO.setWriteBackHandler(new $kstreamName.WriteBackHandler(_pos2, ($parentIoName) => {")
     out.inc
     translator.inSubIOWriteBackHandler = true
     parentIoName
@@ -385,7 +385,7 @@ abstract class ECMAScriptCompiler(typeProvider: ClassTypeProvider, config: Runti
   override def subIOWriteBackFooter(subIO: String): Unit = {
     translator.inSubIOWriteBackHandler = false
     out.dec
-    out.puts("});")
+    out.puts("}));")
   }
 
   override def addChildIO(io: String, childIO: String): Unit =
